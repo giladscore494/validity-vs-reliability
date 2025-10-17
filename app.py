@@ -183,8 +183,13 @@ EVAL_PROMPT = """
 }
 """
 
-# "משתמש רגיל" – GPT מקבל רק פרופיל ובקשה קצרה (נשמר)
-USER_ONE_LINER = "תמליץ לי 5–10 רכבים על פי הצרכים שצוינו בפרופיל. תן נימוק ברור לכל דגם בעברית."
+# "משתמש רגיל" – GPT מדמה משתמש שלא מבין, בקשה טבעית ולא טכנית
+USER_ONE_LINER = """
+היי, אני לא ממש מבין ברכבים. קרא בבקשה את הפרופיל שלי למעלה והמלץ לי על 5–10 דגמים שמתאימים.
+תכתוב בעברית פשוטה, בלי מקצועי מדי. תגיד לי למה כל דגם מתאים לי, ואל תציף בטבלאות.
+תסביר גם חסרונות חשובים (ביטוח יקר, אמינות, DSG, ירידת ערך, צריכת דלק/חשמל אמיתית).
+בסוף תן סיכום קצר – מה הכי מתאים לי ולמה.
+"""
 
 # -------------------------------------------------------------------------------------
 # PROFILES GENERATION (קשיח)
@@ -253,7 +258,7 @@ def build_extreme_profiles(n=12, noise_level: float = 0.9, add_soft_contradictio
             prof["budget_nis"] = 20000; prof["preferences"]["engine_type"] = "בנזין"
         prof["profile_id"] = f"X{i+1:02d}"
 
-        # רעש רך: ניסוחי שימוש (לא שובר את השאלון הקשיח — רק מוסיף "רמזי מציאות")
+        # רעש רך: רמיזות הקשר (לא שובר את השאלון הקשיח)
         if random.random() < noise_level:
             hints = [
                 "העדפה להימנע מ-DSG ישנים", "טווחי מחירים בישראל עלו לאחרונה", "טעינות לילה זמינות בבניין",
@@ -262,11 +267,10 @@ def build_extreme_profiles(n=12, noise_level: float = 0.9, add_soft_contradictio
             ]
             prof["context_hints"] = random.sample(hints, k=min(3, len(hints)))
 
-        # סתירות רכות (ריאליות) — לא שוברים JSON, רק גורמים למודל להתמודד:
+        # סתירות רכות (ריאליות) — לא שוברים JSON, רק מאלצים התמודדות
         if add_soft_contradictions and random.random() < noise_level:
-            # לדוגמה: ביקוש לביצועים + חיסכון, או תקציב נמוך + בקשות פרימיום
             prof["soft_constraints"] = random.choice([
-                "רוצה גם ביצועים חזקים וגם חיסכון גבוה", 
+                "רוצה גם ביצועים חזקים וגם חיסכון גבוה",
                 "תקציב נמוך אך מבקש אבזור פרימיום",
                 "נהיגה עירונית אך מצפה לנוחות כביש מהיר",
                 "רוצה EV אבל חושש מעלויות ביטוח וירידת ערך"
@@ -431,10 +435,10 @@ def call_gpt_user(profile:Dict[str,Any], timeout=120) -> Dict[str,Any]:
         resp = oa.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
-                {"role":"user","content": json.dumps(profile, ensure_ascii=False)},
-                {"role":"user","content": USER_ONE_LINER}
+                {"role":"user","content": f"זה הפרופיל שלי:\n{json.dumps(profile, ensure_ascii=False, indent=2)}"},
+                {"role":"user","content": USER_ONE_LINER.strip()},
             ],
-            temperature=0.8,
+            temperature=0.9,
         )
         text = resp.choices[0].message.content
         parsed = safe_json(text)
@@ -782,7 +786,7 @@ elif st.session_state.stress_stage == "r1_done":
             with open(R1_ZIP_PATH, "rb") as f:
                 st.download_button("⬇️ Round 1 – ZIP (הכול)", f, file_name="stress_round1_bundle.zip", mime="application/zip", key="r1_zip")
 
-    st.info("כעת ניתן לשמור/להעלות את הקבצים האלו. לאחר מכן המשך להפעלת סבב 2.")
+    st.info("כעת ניתן לשמור/להעלות את הקבצים האלו. לאחר מכן המשך להרצה 2.")
     if st.button("▶️ המשך להרצה 2 (ולאחד תוצאות)"):
         # איפוס קבצי round2
         for p in [R2_ROWS_PATH, R2_SUMMARY_CSV, R2_FAILS_CSV, R2_ZIP_PATH, COMBINED_DIFFS_CSV, COMBINED_FAILS_CSV, COMBINED_ZIP_PATH]:
