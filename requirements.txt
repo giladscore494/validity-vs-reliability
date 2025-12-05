@@ -1,6 +1,15 @@
-streamlit
-pandas
-google-generativeai
-openai
-json-repair
-pillow
+# ממשק המשתמש
+streamlit>=1.35.0
+
+# עיבוד נתונים
+pandas>=2.2.0
+numpy>=1.26.0
+
+# ספריית גוגל - חובה גרסה עדכנית לתמיכה ב-Gemini 3
+google-generativeai>=0.8.3
+
+# ספריית OpenAI (עבור GPT-4o)
+openai>=1.30.0
+
+# תיקון JSON (חיוני למניעת קריסות כשהמודל מחזיר פלט שבור)
+json-repair>=0.25.0
