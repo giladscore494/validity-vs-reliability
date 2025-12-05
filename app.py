@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
 # Car Advisor – Benchmark + Stress+++ v15 (Gemini 3 Pro Preview Edition)
-# - Recommender: gemini-3-pro-preview (עם Google Search אמיתי)
+# - Recommender: gemini-3-pro-preview (עם Google Search אמיתי דרך google-genai)
 # - User Simulator: GPT-4o
 # - Judge: GPT-4o
 # =====================================================================================
 
-import os, io, json, time, random, traceback, zipfile
+import os, json, time, random, traceback, zipfile
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 from json_repair import repair_json
 
-# --- Google GenAI (SDK החדש, כולל כלי Google Search) ---
+# --- Google GenAI (SDK החדש, לא google.generativeai!) ---
 from google import genai
 from google.genai import types as genai_types
 
@@ -36,15 +36,8 @@ st.set_page_config(
 )
 
 # --- הגדרת המודלים ---
-
-# 1. המודל שלנו (הממליץ) - Gemini 3 Pro Preview
-#    שים לב: בממשק החדש השם הוא בלי "models/".
-GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview"
-
-# 2. המודל המתחרה/משתמש - GPT-4o
+GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview"  # שם מודל ב־google-genai
 OPENAI_USER_MODEL = "gpt-4o"
-
-# 3. המודל השופט - GPT-4o
 OPENAI_JUDGE_MODEL = "gpt-4o"
 
 # נתיבי קבצים
@@ -382,19 +375,13 @@ def jaccard_overlap(a: set, b: set) -> float:
     return len(a & b) / float(len(a | b))
 
 # -------------------------------------------------------------------------------------
-# COMBINED DIFFS (ל־Stress+++)
+# COMBINED DIFFS ל־Stress+++
 # -------------------------------------------------------------------------------------
 def compute_combined_diffs(
     profiles: List[Dict[str, Any]],
     run1_summary: Dict[str, Any],
     run2_summary: Dict[str, Any]
 ) -> pd.DataFrame:
-    """
-    השוואה בין סיבוב 1 וסיבוב 2:
-    - ציוני Gemini / GPT
-    - מנצח
-    - Jaccard על רשימת הרכבים
-    """
     rows = []
     for prof in profiles:
         qid = prof.get("profile_id")
@@ -425,16 +412,12 @@ def compute_combined_diffs(
 # API CALLS
 # -------------------------------------------------------------------------------------
 def call_gemini(profile:Dict[str,Any], timeout=180) -> Dict[str,Any]:
-    """
-    קריאה ל-Gemini 3 Pro Preview עם כלי Google Search אמיתי (SDK החדש).
-    """
     if gemini_client is None:
         return {"_error": "Gemini client unavailable"}
 
     prompt = build_gemini_prompt(profile)
 
     def _do():
-        # כלי חיפוש אמיתי
         search_tool = genai_types.Tool(
             google_search=genai_types.GoogleSearch()
         )
@@ -444,7 +427,6 @@ def call_gemini(profile:Dict[str,Any], timeout=180) -> Dict[str,Any]:
             top_p=0.9,
             top_k=40,
             tools=[search_tool],
-            # מבקש JSON ישירות – ועדיין מריץ repair_json ליתר ביטחון
             response_mime_type="application/json",
         )
 
