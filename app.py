@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-# Car Advisor – Benchmark + Stress+++ v15 (Final Safe Version)
-# - Recommender: Gemini (Grounding Enabled via Dict)
+# Car Advisor – Benchmark + Stress+++ v15 (Legacy Tool Name Fix)
+# - Recommender: Gemini (Grounding Enabled via 'google_search_retrieval')
 # - User Simulator: GPT-4o
 # - Judge: GPT-4o
 # =====================================================================================
@@ -17,9 +17,7 @@ import numpy as np
 import google.generativeai as genai
 from json_repair import repair_json
 
-# --- הסרנו את השורה הבעייתית של ה-Import ---
-
-# OpenAI SDK (חובה עבור המשתמש והשופט)
+# OpenAI SDK
 try:
     from openai import OpenAI
 except Exception:
@@ -33,8 +31,8 @@ st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_
 # --- הגדרת המודלים ---
 
 # 1. המודל שלנו (הממליץ)
-# אם Gemini 3 Preview לא עובד לך, שנה ל: "gemini-1.5-pro"
-GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview" 
+# שימוש במודל 1.5 פרו שהוא הכי יציב עם הכלי הזה
+GEMINI_RECOMMENDER_MODEL = "gemini-1.5-pro"
 
 # 2. המודל המתחרה/משתמש
 OPENAI_USER_MODEL = "gpt-4o"
@@ -85,17 +83,11 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # בדיקת גרסה כדי לוודא שהשרת לא מריץ משהו עתיק
-    try:
-        st.sidebar.caption(f"Google GenAI Version: {genai.__version__}")
-    except:
-        pass
-
     # לקוח למודל ההמלצות (Gemini)
     try:
-        # ניסיון להגדיר כלי חיפוש בצורה שתעבוד ברוב הגרסאות
-        # אנחנו משתמשים ברשימה של מילונים, שזו הדרך הסטנדרטית
-        tools_config = [{'google_search': {}}]
+        # --- התיקון הסופי: שימוש בשם הישן והבטוח 'google_search_retrieval' ---
+        # זה עובד גם בגרסאות ישנות וגם בחדשות (כתמיכה לאחור)
+        tools_config = [{'google_search_retrieval': {}}]
         
         gemini_recommender = genai.GenerativeModel(
             GEMINI_RECOMMENDER_MODEL,
@@ -104,14 +96,12 @@ if GEMINI_API_KEY:
                 "top_p": 0.9,
                 "top_k": 40,
             },
-            tools=tools_config
+            tools=tools_config 
         )
     except Exception as e:
         st.error(f"Error initializing Gemini: {e}")
-        # במקרה חירום - נטען בלי כלים כדי שהאפליקציה לפחות תעלה
-        gemini_recommender = genai.GenerativeModel(
-            GEMINI_RECOMMENDER_MODEL
-        )
+        # ניסיון חירום אחרון ללא כלים
+        gemini_recommender = genai.GenerativeModel(GEMINI_RECOMMENDER_MODEL)
 else:
     gemini_recommender = None
 
@@ -452,8 +442,8 @@ def merge_two_csvs(base_csv: Optional[pd.DataFrame], new_csv: pd.DataFrame) -> p
     merged = pd.concat([base[~base["QID"].isin(new["QID"])], new], ignore_index=True)
     return merged.sort_values("QID").reset_index(drop=True)
 
-st.title("🚗 Car Advisor – Gemini 3 Pro (Preview) vs GPT-4o")
-st.caption("ממליץ: Gemini 3 Pro (עם חיפוש) | משתמש: GPT-4o | שופט: GPT-4o")
+st.title("🚗 Car Advisor – Gemini 1.5 Pro (w/ Search) vs GPT-4o")
+st.caption("ממליץ: Gemini (עם חיפוש) | משתמש: GPT-4o | שופט: GPT-4o")
 
 with st.sidebar:
     st.markdown("### ⚙️ Benchmark")
@@ -564,7 +554,7 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
             with st.expander(f"{i+1}. {p['profile_id']} | 🏆 {winner} | Search: {search_icon} | Valid: {valid_icon}"):
                 st.markdown("### ⚖️ הכרעת השופט (GPT-4o)")
                 c1, c2, c3 = st.columns([1,1,3])
-                with c1: st.metric("Gemini 3 Score", ev.get("gemini_score", 0))
+                with c1: st.metric("Gemini Score", ev.get("gemini_score", 0))
                 with c2: st.metric("GPT-4o Score", ev.get("gpt_score", 0))
                 with c3: st.info(ev.get('reason', 'N/A'))
                 st.json(ev.get("criteria_breakdown", {}))
@@ -572,7 +562,7 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
                 
                 c_gem, c_gpt = st.columns(2)
                 with c_gem:
-                    st.subheader(f"🤖 Gemini 3 Pro ({len(gem.get('recommended_cars', []))} רכבים)")
+                    st.subheader(f"🤖 Gemini ({len(gem.get('recommended_cars', []))} רכבים)")
                     if queries:
                         with st.popover("🔍 שאילתות חיפוש"): st.code("\n".join(queries))
                     
@@ -625,4 +615,4 @@ elif st.session_state.stress_stage == "finished":
         st.session_state.stress_stage = "idle"
         st.rerun()
 
-st.caption("© 2025 Car Advisor (Gemini 3 Pro Preview)")
+st.caption("© 2025 Car Advisor")
