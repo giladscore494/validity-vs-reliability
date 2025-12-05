@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-# Car Advisor – Benchmark + Stress+++ v15 (Fixed Tool Definition)
-# - Recommender: Gemini (Grounding Enabled via Tool Object)
+# Car Advisor – Benchmark + Stress+++ v15 (Final Safe Version)
+# - Recommender: Gemini (Grounding Enabled via Dict)
 # - User Simulator: GPT-4o
 # - Judge: GPT-4o
 # =====================================================================================
@@ -15,9 +15,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import google.generativeai as genai
-# --- התיקון 1: יבוא האובייקטים הנכונים להגדרת כלים ---
-from google.generativeai.types import Tool, GoogleSearch
 from json_repair import repair_json
+
+# --- הסרנו את השורה הבעייתית של ה-Import ---
 
 # OpenAI SDK (חובה עבור המשתמש והשופט)
 try:
@@ -33,8 +33,8 @@ st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_
 # --- הגדרת המודלים ---
 
 # 1. המודל שלנו (הממליץ)
-# נסה את 3-preview. אם נכשל, הוא יחזור ל-1.5-pro אוטומטית (ראה בלוק ה-try למטה)
-GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview"
+# אם Gemini 3 Preview לא עובד לך, שנה ל: "gemini-1.5-pro"
+GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview" 
 
 # 2. המודל המתחרה/משתמש
 OPENAI_USER_MODEL = "gpt-4o"
@@ -85,15 +85,18 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # --- התיקון 2: יצירת אובייקט הכלי באופן מפורש ---
-    # זה מונע את שגיאת ה-FunctionDeclaration
-    search_tool = Tool(
-        google_search=GoogleSearch()
-    )
-    # -----------------------------------------------
+    # בדיקת גרסה כדי לוודא שהשרת לא מריץ משהו עתיק
+    try:
+        st.sidebar.caption(f"Google GenAI Version: {genai.__version__}")
+    except:
+        pass
 
     # לקוח למודל ההמלצות (Gemini)
     try:
+        # ניסיון להגדיר כלי חיפוש בצורה שתעבוד ברוב הגרסאות
+        # אנחנו משתמשים ברשימה של מילונים, שזו הדרך הסטנדרטית
+        tools_config = [{'google_search': {}}]
+        
         gemini_recommender = genai.GenerativeModel(
             GEMINI_RECOMMENDER_MODEL,
             generation_config={
@@ -101,20 +104,14 @@ if GEMINI_API_KEY:
                 "top_p": 0.9,
                 "top_k": 40,
             },
-            tools=[search_tool] # מעבירים את האובייקט שיצרנו
+            tools=tools_config
         )
     except Exception as e:
-        # Fallback אם המודל החדש לא זמין או יש בעיה אחרת
-        st.warning(f"Error initializing {GEMINI_RECOMMENDER_MODEL}: {e}. Falling back to gemini-1.5-pro.")
-        try:
-            gemini_recommender = genai.GenerativeModel(
-                "gemini-1.5-pro",
-                generation_config={"temperature": 0.2},
-                tools=[search_tool]
-            )
-        except Exception as e2:
-            st.error(f"Critical Gemini Error: {e2}")
-            gemini_recommender = None
+        st.error(f"Error initializing Gemini: {e}")
+        # במקרה חירום - נטען בלי כלים כדי שהאפליקציה לפחות תעלה
+        gemini_recommender = genai.GenerativeModel(
+            GEMINI_RECOMMENDER_MODEL
+        )
 else:
     gemini_recommender = None
 
