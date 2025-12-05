@@ -3,9 +3,9 @@
 # Car Advisor – Benchmark + Stress+++ v15 (Two-Phase, Midway Exports, ZIP, 90% Reality)
 # - Benchmark A/B (Gemini vs GPT) + Evaluator++
 # - Stress+++ : 12 פרופילי קצה, שני סבבים, Noise ריאלי, סתירות רכות, עומס מקבילי מתון
-# - Evaluator++ : חוקי שיפוט עם משקולות קבועים
+# - Evaluator++ : חוקי שיפוט עם משקולות קבועים (GPT-4o)
 # - יצוא ביניים אחרי סבב 1 + ZIP, ואז סבב 2 + ZIP משולב
-# - Streamlit UI מלא ושמירה בין שלבים
+# - Streamlit UI מלא ושמירה בין שלבים עם תצוגה מפורטת
 # =====================================================================================
 
 import os, io, json, time, random, traceback, zipfile
@@ -19,7 +19,7 @@ import numpy as np
 import google.generativeai as genai
 from json_repair import repair_json
 
-# OpenAI SDK (אופציונלי)
+# OpenAI SDK (חובה עבור המשתמש והשופט)
 try:
     from openai import OpenAI
 except Exception:
@@ -30,10 +30,15 @@ except Exception:
 # -------------------------------------------------------------------------------------
 st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_icon="🚗", layout="wide")
 
-# מודלים
-GEMINI_RECOMMENDER_MODEL = "gemini-3-pro"  # המבצע: מודל ההמלצות
-OPENAI_USER_MODEL = "gpt-4o"               # המשתמש/מתחרה: מדמה סביבת צ'אט (GPT)
-GEMINI_JUDGE_MODEL = "gemini-2.5-pro"      # השופט: מודל 2.5 פרו
+# --- הגדרת המודלים ---
+# 1. המודל שלנו (הממליץ) - Gemini 3 Pro
+GEMINI_RECOMMENDER_MODEL = "gemini-3-pro"
+
+# 2. המודל המתחרה/משתמש - GPT-4o
+OPENAI_USER_MODEL = "gpt-4o"
+
+# 3. המודל השופט - חזר להיות GPT-4o
+OPENAI_JUDGE_MODEL = "gpt-4o"
 
 # נתיבי קבצים (Benchmark רגיל)
 RUN_DIR = "runs"
@@ -81,7 +86,7 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # לקוח למודל ההמלצות (המבצע) - Gemini 3 Pro + כלי חיפוש
+    # לקוח למודל ההמלצות (המבצע) - Gemini 3 Pro + כלי חיפוש חובה
     gemini_recommender = genai.GenerativeModel(
         GEMINI_RECOMMENDER_MODEL,
         generation_config={
@@ -91,20 +96,10 @@ if GEMINI_API_KEY:
         },
         tools='google_search_retrieval' # הפעלת כלי חיפוש לממליץ
     )
-    
-    # לקוח למודל השופט - Gemini 2.5 Pro + כלי חיפוש
-    gemini_judge = genai.GenerativeModel(
-        GEMINI_JUDGE_MODEL,
-        generation_config={
-            "temperature": 0.0  # טמפרטורה 0 לשיפוט קפדני
-        },
-        tools='google_search_retrieval' # הפעלת כלי חיפוש לשופט
-    )
 else:
     gemini_recommender = None
-    gemini_judge = None
 
-# לקוח למודל ה-GPT (משתמש/מתחרה)
+# לקוח למודל ה-GPT (עבור משתמש ושופט)
 oa = OpenAI(api_key=OPENAI_API_KEY) if (OPENAI_API_KEY and OpenAI) else None
 
 # -------------------------------------------------------------------------------------
@@ -163,15 +158,14 @@ Reality additives (simulate Israel market pressures):
 Return only JSON.
 """
 
-# Evaluator++ Prompt - מעודכן עם פקודה מפורשת לשימוש ביכולות חיפוש/אימות
+# Evaluator++ Prompt - מותאם ל-GPT-4o (ללא הנחיית כלי ספציפית, אך עם דרישת אימות)
 EVAL_PROMPT = """
 אתה שופט מומחה להשוואת מערכות המלצה לרכב בישראל.
 תפקידך לקבוע מי מהמודלים (Gemini או GPT) סיפק המלצה מדויקת יותר למציאות הישראלית.
 
-🔴 **הנחיה קריטית לאימות מידע:**
-השתמש ביכולותיך (Google Search Tool) כדי לבדוק ולאמת את הנתונים בזמן אמת.
+השתמש בידע העדכני ביותר שיש לך כדי לאמת את הנתונים.
 עליך לוודא:
-1. האם הדגמים המומלצים אכן קיימים בשוק הישראלי בשנתון ובמחיר הנקובים? (בדוק מחירון יד2/לוי יצחק עדכני אם אפשר או אתרי רכב)
+1. האם הדגמים המומלצים אכן קיימים בשוק הישראלי בשנתון ובמחיר הנקובים?
 2. האם רמות הגימור שהוצעו נמכרו בישראל?
 3. האם נתוני צריכת הדלק/חשמל ריאליים?
 הורד ניקוד משמעותי על "הזיות" (Hallucinations) או המצאת דגמים.
@@ -448,7 +442,7 @@ def call_gemini(profile:Dict[str,Any], timeout=180) -> Dict[str,Any]:
     except Exception:
         return {"_error": "Gemini Recommender call failed", "_trace": traceback.format_exc()}
 
-# 2. מודל המשתמש/מתחרה (GPT - OpenAI)
+# 2. מודל המשתמש/מתחרה (GPT-4o)
 def call_gpt_user(profile:Dict[str,Any], timeout=120) -> Dict[str,Any]:
     if oa is None:
         return {"_raw": "OpenAI client unavailable", "_json": {}}
@@ -469,32 +463,28 @@ def call_gpt_user(profile:Dict[str,Any], timeout=120) -> Dict[str,Any]:
     except Exception:
         return {"_raw": "GPT call failed", "_json": {}, "_trace": traceback.format_exc()}
 
-# 3. מודל השופט (Gemini Judge - 2.5 Pro)
+# 3. מודל השופט (GPT-4o)
 def call_evaluator(profile:Dict[str,Any], gem_json:Dict[str,Any], gpt_pack:Dict[str,Any]) -> Dict[str,Any]:
-    if gemini_judge is None:
-        return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"Gemini Judge unavailable","criteria_breakdown":{}}
+    if oa is None:
+        return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"OpenAI Judge unavailable","criteria_breakdown":{}}
     
     def _do():
         gpt_raw = gpt_pack.get("_raw", "") or ""
 
-        # הפרומפט כולל כעת הנחיה מפורשת לביצוע אימות
-        prompt = f"""
-        {EVAL_PROMPT.strip()}
-
-        --- DATA FOR EVALUATION ---
-        PROFILE:
-        {json.dumps(profile, ensure_ascii=False, indent=2)}
+        msgs = [
+            {"role":"system","content":"Hebrew output only. Return JSON only."},
+            {"role":"user","content": f"PROFILE:\n{json.dumps(profile, ensure_ascii=False, indent=2)}"},
+            {"role":"user","content": f"GEMINI_JSON:\n{json.dumps(gem_json, ensure_ascii=False, indent=2)}"},
+            {"role":"user","content": f"GPT_RAW:\n{(gpt_raw[:2000])}"},
+            {"role":"user","content": EVAL_PROMPT}
+        ]
         
-        GEMINI_JSON (Recommended by {GEMINI_RECOMMENDER_MODEL}):
-        {json.dumps(gem_json, ensure_ascii=False, indent=2)}
-        
-        GPT_RAW (Recommended by {OPENAI_USER_MODEL}, Raw Text):
-        {(gpt_raw[:2000])}
-        --- END DATA ---
-        """
-        
-        resp = gemini_judge.generate_content(prompt, request_options={"timeout": 120})
-        return safe_json(resp.text)
+        resp = oa.chat.completions.create(
+            model=OPENAI_JUDGE_MODEL,
+            messages=msgs,
+            temperature=0.0
+        )
+        return safe_json(resp.choices[0].message.content)
     
     try:
         return call_with_retry(_do, retries=2)
@@ -636,26 +626,73 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
                 val = validate_gemini_payload(gem)
                 return p, gem, gpt, ev, val
             futures.append(pool.submit(r))
-        for fut in as_completed(futures):
+        for i, fut in enumerate(as_completed(futures)):
             p, gem, gpt, ev, val = fut.result()
+            
             if not val["ok"]:
                 failures.append({"QID": p["profile_id"], "issues": json.dumps(val["issues"], ensure_ascii=False)})
+            
             entry = {"ts": datetime.now().isoformat(), "run": run_no, "profile": p, "gemini": gem, "gpt": gpt, "eval": ev, "validation": val}
             append_item(out_rows, entry)
             rows.append(entry)
             
             queries = gem.get("search_queries", [])
+            search_count = len(queries)
+            winner = ev.get("winner", "Tie")
+            
             run_summary[p["profile_id"]] = {
                 "gem_score": ev.get("gemini_score", 0),
                 "gpt_score": ev.get("gpt_score", 0),
-                "winner": ev.get("winner", "Tie"),
+                "winner": winner,
                 "cars_set": extract_car_tuples(gem),
                 "val_ok": val["ok"],
-                "search_count": len(queries)
+                "search_count": search_count
             }
             
-            search_icon = f"🌐 ({len(queries)})" if queries else "🏠"
-            st.write(f"• {p['profile_id']} | Search: {search_icon} | Winner: {ev.get('winner','?')}")
+            # תצוגה מפורטת (Expander)
+            search_icon = f"🌐 ({search_count})" if queries else "🏠"
+            valid_icon = "✅" if val["ok"] else "❌"
+            
+            with st.expander(f"{i+1}. {p['profile_id']} | 🏆 {winner} | Search: {search_icon} | Valid: {valid_icon}"):
+                
+                # כרטיסיית השיפוט
+                st.markdown("### ⚖️ הכרעת השופט (GPT-4o)")
+                col_score1, col_score2, col_reason = st.columns([1, 1, 3])
+                with col_score1: st.metric("Gemini Score", ev.get("gemini_score", 0))
+                with col_score2: st.metric("GPT Score", ev.get("gpt_score", 0))
+                with col_reason: st.info(f"**נימוק:** {ev.get('reason', 'N/A')}")
+                st.markdown("**פירוט ציונים:**")
+                st.json(ev.get("criteria_breakdown", {}))
+                
+                st.divider()
+                
+                # כרטיסיית השוואה
+                col_gem, col_gpt = st.columns(2)
+                
+                with col_gem:
+                    st.subheader(f"🤖 Gemini ({len(gem.get('recommended_cars', []))} רכבים)")
+                    if queries:
+                        with st.popover("🔍 הצג שאילתות חיפוש"):
+                            st.code("\n".join(queries), language="text")
+                    
+                    cars = gem.get("recommended_cars", [])
+                    if cars:
+                        for c in cars:
+                            st.text(f"• {c.get('brand')} {c.get('model')} {c.get('year')} ({c.get('price_range_nis')}₪)")
+                    else:
+                        st.warning("לא הוחזרו רכבים או JSON שגוי")
+                    
+                    with st.popover("📄 JSON מלא"):
+                        st.json(gem)
+
+                with col_gpt:
+                    st.subheader("👤 GPT (User Simulator)")
+                    raw_txt = gpt.get("_raw", "")
+                    st.text_area("תשובת המודל המתחרה", value=raw_txt, height=200)
+
+                st.divider()
+                st.caption("📝 נתוני הפרופיל שנשלחו:")
+                st.json(p)
     
     df_sum = pd.DataFrame([{
         "QID": k, 
