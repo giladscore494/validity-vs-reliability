@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import streamlit as st
 import pandas as pd
 import numpy as np
+
 import google.generativeai as genai
 from json_repair import repair_json
 
@@ -82,9 +83,7 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-    # לקוח למודל ההמלצות (Gemini 3)
     try:
-        # שים לב: google.generativeai הוא SDK ישן, אבל עדיין תומך ב-id של gemini-3-pro-preview
         gemini_recommender = genai.GenerativeModel(
             GEMINI_RECOMMENDER_MODEL,
             generation_config={
@@ -92,8 +91,7 @@ if GEMINI_API_KEY:
                 "top_p": 0.9,
                 "top_k": 40,
             },
-            # אם google_search לא נתמך למודל Preview – הספרייה תזרוק חריגה ונתפוס למטה.
-            # במידת הצורך אפשר לרוקן את tools=[] כדי למנוע שימוש ב-Google Search.
+            # בלי Google Search – רק המודל עצמו
             tools=[]
         )
     except Exception as e:
@@ -281,7 +279,8 @@ def build_extreme_profiles(n=12, noise_level: float = 0.9, add_soft_contradictio
 # UTILS
 # -------------------------------------------------------------------------------------
 def safe_json(text: Optional[str]) -> Dict[str,Any]:
-    if not text: return {}
+    if not text:
+        return {}
     try:
         fixed = repair_json(text)
         return json.loads(fixed)
@@ -316,7 +315,8 @@ def call_with_retry(fn, retries=3, backoff=1.5):
             time.sleep(backoff*(i+1))
     raise last_err
 
-def _is_num(x): return isinstance(x,(int,float)) and not isinstance(x,bool)
+def _is_num(x): 
+    return isinstance(x,(int,float)) and not isinstance(x,bool)
 
 def make_zip(output_path: str, files: List[Tuple[str, str]]):
     try:
@@ -330,7 +330,11 @@ def make_zip(output_path: str, files: List[Tuple[str, str]]):
 # -------------------------------------------------------------------------------------
 # VALIDATION
 # -------------------------------------------------------------------------------------
-REQ_NUM = ["reliability_score","maintenance_cost","safety_rating","insurance_cost","resale_value","performance_score","comfort_features","suitability","annual_fee","avg_fuel_consumption","fit_score"]
+REQ_NUM = [
+    "reliability_score","maintenance_cost","safety_rating","insurance_cost",
+    "resale_value","performance_score","comfort_features","suitability",
+    "annual_fee","avg_fuel_consumption","fit_score"
+]
 REQ_CAT = ["brand","model","year","fuel","gear","price_range_nis","market_supply"]
 
 def validate_gemini_car(c: dict) -> list:
@@ -692,8 +696,9 @@ if st.session_state.stress_stage == "idle":
 
 elif st.session_state.stress_stage == "r1_done":
     st.success("Round 1 Done.")
-    with open(R1_ZIP_PATH, "rb") as f:
-        st.download_button("Download Round 1 ZIP", f, file_name="r1.zip")
+    if os.path.exists(R1_ZIP_PATH):
+        with open(R1_ZIP_PATH, "rb") as f:
+            st.download_button("Download Round 1 ZIP", f, file_name="r1.zip")
     if st.button("Start Round 2"):
         r2_res = run_one_stress_round(2, st.session_state.stress_profiles, R2_ROWS_PATH, R2_SUMMARY_CSV, R2_FAILS_CSV)
         st.session_state.stress_run2_data = r2_res[3]
