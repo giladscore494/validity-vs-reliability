@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-# Car Advisor – Benchmark + Stress+++ v15 (Gemini 3 Pro Preview Edition)
-# - Recommender: Gemini 3 Pro Preview (Grounding Enabled)
+# Car Advisor – Benchmark + Stress+++ v15 (Final Fixed Version)
+# - Recommender: Gemini (Grounding Enabled via 'google_search')
 # - User Simulator: GPT-4o
 # - Judge: GPT-4o
 # =====================================================================================
@@ -26,18 +26,19 @@ except Exception:
 # -------------------------------------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------------------------------------
-st.set_page_config(page_title="Car Advisor – Gemini 3 Pro Edition", page_icon="🚗", layout="wide")
+st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_icon="🚗", layout="wide")
 
-# --- הגדרת המודלים (מעודכן לפי ההכרזה החדשה) ---
+# --- הגדרת המודלים ---
 
-# 1. המודל שלנו (הממליץ) - Gemini 3 Pro Preview
-# הערה: וודא שספריית google-generativeai מעודכנת לגרסה האחרונה
-GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview"
+# 1. המודל שלנו (הממליץ)
+# הערה: אם יש לך גישה ל-gemini-3-pro-preview, שנה את השם כאן.
+# אם אתה מקבל שגיאת 404, השאר את זה על gemini-1.5-pro שהוא הכי חזק כרגע ב-Public API.
+GEMINI_RECOMMENDER_MODEL = "gemini-1.5-pro" 
 
-# 2. המודל המתחרה/משתמש - GPT-4o
+# 2. המודל המתחרה/משתמש
 OPENAI_USER_MODEL = "gpt-4o"
 
-# 3. המודל השופט - GPT-4o
+# 3. המודל השופט
 OPENAI_JUDGE_MODEL = "gpt-4o"
 
 # נתיבי קבצים
@@ -83,7 +84,7 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # לקוח למודל ההמלצות (Gemini 3) + כלי חיפוש חובה
+    # לקוח למודל ההמלצות (Gemini) + כלי חיפוש
     try:
         gemini_recommender = genai.GenerativeModel(
             GEMINI_RECOMMENDER_MODEL,
@@ -92,10 +93,11 @@ if GEMINI_API_KEY:
                 "top_p": 0.9,
                 "top_k": 40,
             },
-            tools='google_search_retrieval' # הפעלת כלי חיפוש
+            # --- התיקון הקריטי: שימוש ב-google_search ---
+            tools='google_search' 
         )
     except Exception as e:
-        st.error(f"Error initializing Gemini 3: {e}. Try updating `pip install -U google-generativeai`")
+        st.error(f"Error initializing Gemini: {e}")
         gemini_recommender = None
 else:
     gemini_recommender = None
@@ -116,8 +118,7 @@ Act as an **independent automotive data analyst** using live-market style reason
 
 🔴 **CRITICAL INSTRUCTION: USE GOOGLE SEARCH**
 You MUST use the Google Search tool to verify current prices, availability, and trim levels in Israel for TODAY. 
-Do not rely on outdated training data. 
-Use your advanced reasoning capabilities (Gemini 3) to cross-reference multiple sources.
+Do not rely on outdated training data.
 
 Hard constraints (MUST):
 - Return only ONE top-level JSON object.
@@ -157,7 +158,7 @@ Return only JSON.
 
 EVAL_PROMPT = """
 אתה שופט מומחה להשוואת מערכות המלצה לרכב בישראל.
-תפקידך לקבוע מי מהמודלים (Gemini 3 או GPT-4o) סיפק המלצה מדויקת יותר למציאות הישראלית.
+תפקידך לקבוע מי מהמודלים (Gemini או GPT) סיפק המלצה מדויקת יותר למציאות הישראלית.
 
 השתמש בידע העדכני ביותר שיש לך כדי לאמת את הנתונים.
 עליך לוודא:
@@ -438,8 +439,8 @@ def merge_two_csvs(base_csv: Optional[pd.DataFrame], new_csv: pd.DataFrame) -> p
     merged = pd.concat([base[~base["QID"].isin(new["QID"])], new], ignore_index=True)
     return merged.sort_values("QID").reset_index(drop=True)
 
-st.title("🚗 Car Advisor – Gemini 3 Pro (Preview) vs GPT-4o")
-st.caption("ממליץ: Gemini 3 Pro (עם חיפוש) | משתמש: GPT-4o | שופט: GPT-4o")
+st.title("🚗 Car Advisor – Gemini (Grounding) vs GPT-4o")
+st.caption("ממליץ: Gemini (עם חיפוש) | משתמש: GPT-4o | שופט: GPT-4o")
 
 with st.sidebar:
     st.markdown("### ⚙️ Benchmark")
@@ -505,7 +506,7 @@ if run_btn:
 
 # Stress+++
 st.markdown("---")
-st.header("🧪 Stress+++ Mode (Gemini 3 Pro)")
+st.header("🧪 Stress+++ Mode (Gemini w/ Search)")
 if "stress_stage" not in st.session_state: st.session_state.stress_stage = "idle"
 if "stress_run1_data" not in st.session_state: st.session_state.stress_run1_data = None
 if "stress_run2_data" not in st.session_state: st.session_state.stress_run2_data = None
@@ -550,7 +551,7 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
             with st.expander(f"{i+1}. {p['profile_id']} | 🏆 {winner} | Search: {search_icon} | Valid: {valid_icon}"):
                 st.markdown("### ⚖️ הכרעת השופט (GPT-4o)")
                 c1, c2, c3 = st.columns([1,1,3])
-                with c1: st.metric("Gemini 3 Score", ev.get("gemini_score", 0))
+                with c1: st.metric("Gemini Score", ev.get("gemini_score", 0))
                 with c2: st.metric("GPT-4o Score", ev.get("gpt_score", 0))
                 with c3: st.info(ev.get('reason', 'N/A'))
                 st.json(ev.get("criteria_breakdown", {}))
@@ -558,7 +559,7 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
                 
                 c_gem, c_gpt = st.columns(2)
                 with c_gem:
-                    st.subheader(f"🤖 Gemini 3 Pro ({len(gem.get('recommended_cars', []))} רכבים)")
+                    st.subheader(f"🤖 Gemini ({len(gem.get('recommended_cars', []))} רכבים)")
                     if queries:
                         with st.popover("🔍 שאילתות חיפוש"): st.code("\n".join(queries))
                     
@@ -611,4 +612,4 @@ elif st.session_state.stress_stage == "finished":
         st.session_state.stress_stage = "idle"
         st.rerun()
 
-st.caption("© 2025 Car Advisor (Gemini 3 Pro Preview)")
+st.caption("© 2025 Car Advisor")
