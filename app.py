@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-# Car Advisor – Benchmark + Stress+++ v15 (Gemini 3 Pro Preview Edition)
-# - Recommender: gemini-3-pro-preview (Grounding Enabled)
+# Car Advisor – Benchmark + Stress+++ v15 (Fixed Tool Definition)
+# - Recommender: Gemini (Grounding Enabled via Tool Object)
 # - User Simulator: GPT-4o
 # - Judge: GPT-4o
 # =====================================================================================
@@ -15,6 +15,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import google.generativeai as genai
+# --- התיקון 1: יבוא האובייקטים הנכונים להגדרת כלים ---
+from google.generativeai.types import Tool, GoogleSearch
 from json_repair import repair_json
 
 # OpenAI SDK (חובה עבור המשתמש והשופט)
@@ -26,17 +28,18 @@ except Exception:
 # -------------------------------------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------------------------------------
-st.set_page_config(page_title="Car Advisor – Gemini 3 Pro Preview", page_icon="🚗", layout="wide")
+st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_icon="🚗", layout="wide")
 
-# --- הגדרת המודלים (מעודכן לפי הרשימה שלך) ---
+# --- הגדרת המודלים ---
 
-# 1. המודל שלנו (הממליץ) - Gemini 3 Pro Preview
+# 1. המודל שלנו (הממליץ)
+# נסה את 3-preview. אם נכשל, הוא יחזור ל-1.5-pro אוטומטית (ראה בלוק ה-try למטה)
 GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview"
 
-# 2. המודל המתחרה/משתמש - GPT-4o
+# 2. המודל המתחרה/משתמש
 OPENAI_USER_MODEL = "gpt-4o"
 
-# 3. המודל השופט - GPT-4o
+# 3. המודל השופט
 OPENAI_JUDGE_MODEL = "gpt-4o"
 
 # נתיבי קבצים
@@ -82,7 +85,14 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # לקוח למודל ההמלצות (Gemini 3) + כלי חיפוש חובה
+    # --- התיקון 2: יצירת אובייקט הכלי באופן מפורש ---
+    # זה מונע את שגיאת ה-FunctionDeclaration
+    search_tool = Tool(
+        google_search=GoogleSearch()
+    )
+    # -----------------------------------------------
+
+    # לקוח למודל ההמלצות (Gemini)
     try:
         gemini_recommender = genai.GenerativeModel(
             GEMINI_RECOMMENDER_MODEL,
@@ -91,12 +101,20 @@ if GEMINI_API_KEY:
                 "top_p": 0.9,
                 "top_k": 40,
             },
-            # שימוש ברשימה של מילון - הפורמט הבטוח ביותר למניעת שגיאות
-            tools=[{'google_search': {}}] 
+            tools=[search_tool] # מעבירים את האובייקט שיצרנו
         )
     except Exception as e:
-        st.error(f"Error initializing Gemini 3: {e}. Try updating `pip install -U google-generativeai`")
-        gemini_recommender = None
+        # Fallback אם המודל החדש לא זמין או יש בעיה אחרת
+        st.warning(f"Error initializing {GEMINI_RECOMMENDER_MODEL}: {e}. Falling back to gemini-1.5-pro.")
+        try:
+            gemini_recommender = genai.GenerativeModel(
+                "gemini-1.5-pro",
+                generation_config={"temperature": 0.2},
+                tools=[search_tool]
+            )
+        except Exception as e2:
+            st.error(f"Critical Gemini Error: {e2}")
+            gemini_recommender = None
 else:
     gemini_recommender = None
 
@@ -116,8 +134,7 @@ Act as an **independent automotive data analyst** using live-market style reason
 
 🔴 **CRITICAL INSTRUCTION: USE GOOGLE SEARCH**
 You MUST use the Google Search tool to verify current prices, availability, and trim levels in Israel for TODAY. 
-Do not rely on outdated training data. 
-Use your advanced reasoning capabilities (Gemini 3) to cross-reference multiple sources.
+Do not rely on outdated training data.
 
 Hard constraints (MUST):
 - Return only ONE top-level JSON object.
@@ -157,7 +174,7 @@ Return only JSON.
 
 EVAL_PROMPT = """
 אתה שופט מומחה להשוואת מערכות המלצה לרכב בישראל.
-תפקידך לקבוע מי מהמודלים (Gemini 3 או GPT-4o) סיפק המלצה מדויקת יותר למציאות הישראלית.
+תפקידך לקבוע מי מהמודלים (Gemini או GPT) סיפק המלצה מדויקת יותר למציאות הישראלית.
 
 השתמש בידע העדכני ביותר שיש לך כדי לאמת את הנתונים.
 עליך לוודא:
@@ -505,7 +522,7 @@ if run_btn:
 
 # Stress+++
 st.markdown("---")
-st.header("🧪 Stress+++ Mode (Gemini 3 Pro)")
+st.header("🧪 Stress+++ Mode (Gemini w/ Search)")
 if "stress_stage" not in st.session_state: st.session_state.stress_stage = "idle"
 if "stress_run1_data" not in st.session_state: st.session_state.stress_run1_data = None
 if "stress_run2_data" not in st.session_state: st.session_state.stress_run2_data = None
