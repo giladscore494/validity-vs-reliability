@@ -1,16 +1,11 @@
-streamlit>=1.34.0
-pandas>=2.1.4
-numpy>=1.26.0
+streamlit==1.52.1
+pandas==2.3.3
+numpy==2.3.5
+openai==2.9.0
+json-repair==0.54.2
 
-# Gemini (SDK הישן – הקוד שלך משתמש בו)
-google-generativeai>=0.4.0
+# Gemini – SDK הישן עדיין יכול להישאר (לא חובה אבל לא מפריע)
+google-generativeai==0.8.5
 
-# JSON repair למענה חלקי
-json-repair>=0.2.4
-
-# OpenAI SDK (GPT-4o – User & Judge)
-openai>=1.37.0
-
-# תומך בכלים
-requests>=2.31.0
-tqdm>=4.66.0
+# Gemini – SDK החדש עם כלי Google Search
+google-genai>=1.0.0
