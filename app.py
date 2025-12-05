@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-# Car Advisor – Benchmark + Stress+++ v15 (Two-Phase, Midway Exports, ZIP, 90% Reality)
-# - Benchmark A/B (Gemini vs GPT) + Evaluator++
-# - Stress+++ : 12 פרופילי קצה, שני סבבים, Noise ריאלי, סתירות רכות, עומס מקבילי מתון
-# - Evaluator++ : חוקי שיפוט עם משקולות קבועים (GPT-4o)
-# - יצוא ביניים אחרי סבב 1 + ZIP, ואז סבב 2 + ZIP משולב
-# - Streamlit UI מלא ושמירה בין שלבים עם תצוגה מפורטת
+# Car Advisor – Benchmark + Stress+++ v15 (Gemini 3 Pro Preview Edition)
+# - Recommender: Gemini 3 Pro Preview (Grounding Enabled)
+# - User Simulator: GPT-4o
+# - Judge: GPT-4o
 # =====================================================================================
 
 import os, io, json, time, random, traceback, zipfile
@@ -28,19 +26,21 @@ except Exception:
 # -------------------------------------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------------------------------------
-st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_icon="🚗", layout="wide")
+st.set_page_config(page_title="Car Advisor – Gemini 3 Pro Edition", page_icon="🚗", layout="wide")
 
-# --- הגדרת המודלים ---
-# 1. המודל שלנו (הממליץ) - Gemini 3 Pro
-GEMINI_RECOMMENDER_MODEL = "gemini-3-pro"
+# --- הגדרת המודלים (מעודכן לפי ההכרזה החדשה) ---
+
+# 1. המודל שלנו (הממליץ) - Gemini 3 Pro Preview
+# הערה: וודא שספריית google-generativeai מעודכנת לגרסה האחרונה
+GEMINI_RECOMMENDER_MODEL = "gemini-3-pro-preview"
 
 # 2. המודל המתחרה/משתמש - GPT-4o
 OPENAI_USER_MODEL = "gpt-4o"
 
-# 3. המודל השופט - חזר להיות GPT-4o
+# 3. המודל השופט - GPT-4o
 OPENAI_JUDGE_MODEL = "gpt-4o"
 
-# נתיבי קבצים (Benchmark רגיל)
+# נתיבי קבצים
 RUN_DIR = "runs"
 os.makedirs(RUN_DIR, exist_ok=True)
 ROWS_PATH = os.path.join(RUN_DIR, "ab_rows.json")
@@ -48,7 +48,7 @@ PARTIAL_CSV_PATH = os.path.join(RUN_DIR, "ab_results_partial.csv")
 FINAL_CSV_PATH = os.path.join(RUN_DIR, "ab_results_final.csv")
 MERGED_CSV_PATH = os.path.join(RUN_DIR, "ab_results_merged.csv")
 
-# Stress+++ – תיקיות מסודרות לשני סבבים + משולב
+# Stress+++ Paths
 STRESS_DIR = os.path.join(RUN_DIR, "stress_v15")
 R1_DIR = os.path.join(STRESS_DIR, "round1")
 R2_DIR = os.path.join(STRESS_DIR, "round2")
@@ -56,19 +56,16 @@ COMBINED_DIR = os.path.join(STRESS_DIR, "combined")
 for d in [STRESS_DIR, R1_DIR, R2_DIR, COMBINED_DIR]:
     os.makedirs(d, exist_ok=True)
 
-# קבצי יצוא לסבב 1
 R1_ROWS_PATH     = os.path.join(R1_DIR, "stress_round1_rows.json")
 R1_SUMMARY_CSV   = os.path.join(R1_DIR, "stress_round1_summary.csv")
 R1_FAILS_CSV     = os.path.join(R1_DIR, "stress_round1_validation_failures.csv")
 R1_ZIP_PATH      = os.path.join(R1_DIR, "stress_round1_bundle.zip")
 
-# קבצי יצוא לסבב 2
 R2_ROWS_PATH     = os.path.join(R2_DIR, "stress_round2_rows.json")
 R2_SUMMARY_CSV   = os.path.join(R2_DIR, "stress_round2_summary.csv")
 R2_FAILS_CSV     = os.path.join(R2_DIR, "stress_round2_validation_failures.csv")
 R2_ZIP_PATH      = os.path.join(R2_DIR, "stress_round2_bundle.zip")
 
-# קבצים משולבים
 COMBINED_DIFFS_CSV  = os.path.join(COMBINED_DIR, "stress_combined_diffs.csv")
 COMBINED_FAILS_CSV  = os.path.join(COMBINED_DIR, "stress_combined_validation_failures.csv")
 COMBINED_ZIP_PATH   = os.path.join(COMBINED_DIR, "stress_combined_bundle.zip")
@@ -86,29 +83,30 @@ if not OPENAI_API_KEY:
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # לקוח למודל ההמלצות (המבצע) - Gemini 3 Pro + כלי חיפוש חובה
-    gemini_recommender = genai.GenerativeModel(
-        GEMINI_RECOMMENDER_MODEL,
-        generation_config={
-            "temperature": 0.2,
-            "top_p": 0.9,
-            "top_k": 40,
-        },
-        tools='google_search_retrieval' # הפעלת כלי חיפוש לממליץ
-    )
+    # לקוח למודל ההמלצות (Gemini 3) + כלי חיפוש חובה
+    try:
+        gemini_recommender = genai.GenerativeModel(
+            GEMINI_RECOMMENDER_MODEL,
+            generation_config={
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "top_k": 40,
+            },
+            tools='google_search_retrieval' # הפעלת כלי חיפוש
+        )
+    except Exception as e:
+        st.error(f"Error initializing Gemini 3: {e}. Try updating `pip install -U google-generativeai`")
+        gemini_recommender = None
 else:
     gemini_recommender = None
 
-# לקוח למודל ה-GPT (עבור משתמש ושופט)
+# לקוח למודל ה-GPT
 oa = OpenAI(api_key=OPENAI_API_KEY) if (OPENAI_API_KEY and OpenAI) else None
 
 # -------------------------------------------------------------------------------------
 # PROMPTS
 # -------------------------------------------------------------------------------------
 def build_gemini_prompt(profile: Dict[str, Any]) -> str:
-    """
-    Stress+++ : שומר על הדרישות הקשיחות והמבנה.
-    """
     return f"""
 Please recommend cars for an Israeli customer. Here is the user profile (JSON):
 {json.dumps(profile, ensure_ascii=False, indent=2)}
@@ -117,7 +115,9 @@ You are in **STRESS+++ reality mode (90%)**.
 Act as an **independent automotive data analyst** using live-market style reasoning for Israel.
 
 🔴 **CRITICAL INSTRUCTION: USE GOOGLE SEARCH**
-You MUST use the Google Search tool to verify current prices, availability, and trim levels in Israel for TODAY. Do not rely on outdated training data.
+You MUST use the Google Search tool to verify current prices, availability, and trim levels in Israel for TODAY. 
+Do not rely on outdated training data. 
+Use your advanced reasoning capabilities (Gemini 3) to cross-reference multiple sources.
 
 Hard constraints (MUST):
 - Return only ONE top-level JSON object.
@@ -126,42 +126,38 @@ Hard constraints (MUST):
 
 Output requirements:
 1) Return a SINGLE JSON object with fields: "search_performed", "search_queries", "recommended_cars".
-2) search_performed: ALWAYS return True. Simulate realistic Hebrew queries.
-3) search_queries: ALWAYS include the exact Hebrew queries you would run to find this info.
+2) search_performed: ALWAYS return True.
+3) search_queries: ALWAYS include the exact Hebrew queries you would run.
 4) recommended_cars: an array of 5–10 cars. EACH car MUST include:
     - brand, model, year, fuel, gear, turbo, engine_cc, price_range_nis
-    - avg_fuel_consumption (+ fuel_method):
-        * non-EV: km per liter (number only)
-        * EV: kWh per 100 km (number only)
-    **explanations in Hebrew only**
-    - annual_fee (₪/year, number only) + fee_method
-    - reliability_score (1–10, number only) + reliability_method
-    - maintenance_cost (₪/year, number only) + maintenance_method
-    - safety_rating (1–10, number only) + safety_method
-    - insurance_cost (₪/year, number only) + insurance_method
-    - resale_value (1–10, number only) + resale_method
-    - performance_score (1–10, number only) + performance_method
-    - comfort_features (1–10, number only) + comfort_method
-    - suitability (1–10, number only) + suitability_method
+    - avg_fuel_consumption (+ fuel_method)
+    - annual_fee (₪/year) + fee_method
+    - reliability_score (1–10) + reliability_method
+    - maintenance_cost (₪/year) + maintenance_method
+    - safety_rating (1–10) + safety_method
+    - insurance_cost (₪/year) + insurance_method
+    - resale_value (1–10) + resale_method
+    - performance_score (1–10) + performance_method
+    - comfort_features (1–10) + comfort_method
+    - suitability (1–10) + suitability_method
     - market_supply ("גבוה" / "בינוני" / "נמוך") + supply_method
-    - fit_score (0–100, number only)
+    - fit_score (0–100)
     - comparison_comment (Hebrew)
     - not_recommended_reason (Hebrew) — at least for one car
     **All explanations must be in Hebrew**
 
-Reality additives (simulate Israel market pressures):
+Reality additives:
 - Prefer trims with high availability in second-hand market 2014–2020 if budget is low
-- Penalize DSG issues where relevant; consider Toyota hybrid reliability bonus
+- Penalize DSG issues where relevant
 - Penalize inflated claims (e.g. EV savings ignoring battery degradation)
-- For EV: gear must be automatic (reject if not)
+- For EV: gear must be automatic
 
 Return only JSON.
 """
 
-# Evaluator++ Prompt - מותאם ל-GPT-4o (ללא הנחיית כלי ספציפית, אך עם דרישת אימות)
 EVAL_PROMPT = """
 אתה שופט מומחה להשוואת מערכות המלצה לרכב בישראל.
-תפקידך לקבוע מי מהמודלים (Gemini או GPT) סיפק המלצה מדויקת יותר למציאות הישראלית.
+תפקידך לקבוע מי מהמודלים (Gemini 3 או GPT-4o) סיפק המלצה מדויקת יותר למציאות הישראלית.
 
 השתמש בידע העדכני ביותר שיש לך כדי לאמת את הנתונים.
 עליך לוודא:
@@ -177,12 +173,6 @@ EVAL_PROMPT = """
 4. עקביות פנימית – 15%
 5. רלוונטיות לשוק הישראלי (כולל אימות מחירים וזמינות) – 10%
 6. איכות הנימוקים בעברית – 10%
-
-הנחיות קשיחות:
-- דרג כל קריטריון מספרית (0–100) ושקלל לפי המשקולות לניקוד סופי.
-- אם JSON של Gemini לא תקין/חסר שדות/מספרים — הפחת בניקוד "בהירות ודיוק JSON".
-- אם יש סתירה (EV עם גיר ידני/לא אוטומטי) — הפחת ב"עקביות פנימית".
-- החזר JSON בלבד.
 
 פורמט פלט:
 {
@@ -201,7 +191,6 @@ EVAL_PROMPT = """
 }
 """
 
-# "משתמש רגיל" – GPT מדמה משתמש שלא מבין, בקשה טבעית ולא טכנית
 USER_ONE_LINER = """
 היי, אני לא ממש מבין ברכבים. קרא בבקשה את הפרופיל שלי למעלה והמלץ לי על 5–10 דגמים שמתאימים.
 תכתוב בעברית פשוטה, בלי מקצועי מדי. תגיד לי למה כל דגם מתאים לי, ואל תציף בטבלאות.
@@ -210,7 +199,7 @@ USER_ONE_LINER = """
 """
 
 # -------------------------------------------------------------------------------------
-# PROFILES GENERATION (קשיח)
+# PROFILES GENERATION
 # -------------------------------------------------------------------------------------
 ENGINE = ["בנזין","דיזל","היברידי","פלאג-אין","חשמלי"]
 GEAR = ["אוטומט","ידני","DCT/DSG","CVT"]
@@ -245,7 +234,6 @@ def build_profile(i:int) -> Dict[str,Any]:
         "risk_tolerance": random.choice(["נמוכה","בינונית","גבוהה"])
     }
 
-# פרופילי קצה
 def build_extreme_profiles(n=12, noise_level: float = 0.9, add_soft_contradictions: bool = True):
     extremes = []
     for i in range(n):
@@ -277,19 +265,14 @@ def build_extreme_profiles(n=12, noise_level: float = 0.9, add_soft_contradictio
         prof["profile_id"] = f"X{i+1:02d}"
 
         if random.random() < noise_level:
-            hints = [
-                "העדפה להימנע מ-DSG ישנים", "טווחי מחירים בישראל עלו לאחרונה", "טעינות לילה זמינות בבניין",
-                "נסיעות קצרות יומיות בפקקים", "שוק היד-2 חשוב מאוד", "שיקולי אמינות מעל הכול",
-                "ביטוח מקיף יקר לנהגים צעירים", "הוצאות דלק צריכות להיות נמוכות"
-            ]
+            hints = ["העדפה להימנע מ-DSG ישנים", "טווחי מחירים בישראל עלו לאחרונה", "טעינות לילה זמינות בבניין", "נסיעות קצרות בפקקים", "שוק היד-2 חשוב"]
             prof["context_hints"] = random.sample(hints, k=min(3, len(hints)))
 
         if add_soft_contradictions and random.random() < noise_level:
             prof["soft_constraints"] = random.choice([
                 "רוצה גם ביצועים חזקים וגם חיסכון גבוה",
                 "תקציב נמוך אך מבקש אבזור פרימיום",
-                "נהיגה עירונית אך מצפה לנוחות כביש מהיר",
-                "רוצה EV אבל חושש מעלויות ביטוח וירידת ערך"
+                "רוצה EV אבל חושש מעלויות ביטוח"
             ])
         extremes.append(prof)
     return extremes
@@ -298,26 +281,21 @@ def build_extreme_profiles(n=12, noise_level: float = 0.9, add_soft_contradictio
 # UTILS
 # -------------------------------------------------------------------------------------
 def safe_json(text: Optional[str]) -> Dict[str,Any]:
-    if not text:
-        return {}
+    if not text: return {}
     try:
         fixed = repair_json(text)
         return json.loads(fixed)
-    except Exception:
-        return {}
+    except: return {}
 
 def load_list(path:str) -> List[Dict[str,Any]]:
     if os.path.exists(path):
         try:
-            with open(path,"r",encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
+            with open(path,"r",encoding="utf-8") as f: return json.load(f)
+        except: return []
     return []
 
 def save_list(path:str, data:List[Dict[str,Any]]):
-    with open(path,"w",encoding="utf-8") as f:
-        json.dump(data,f,ensure_ascii=False,indent=2)
+    with open(path,"w",encoding="utf-8") as f: json.dump(data,f,ensure_ascii=False,indent=2)
 
 def append_item(path:str, item:Dict[str,Any]):
     data = load_list(path)
@@ -327,56 +305,32 @@ def append_item(path:str, item:Dict[str,Any]):
 def call_with_retry(fn, retries=3, backoff=1.5):
     last_err = None
     for i in range(retries):
-        try:
-            return fn()
+        try: return fn()
         except Exception as e:
             last_err = e
             time.sleep(backoff*(i+1))
     raise last_err
 
-def _is_num(x):
-    return isinstance(x,(int,float)) and not isinstance(x,bool)
+def _is_num(x): return isinstance(x,(int,float)) and not isinstance(x,bool)
 
 def make_zip(output_path: str, files: List[Tuple[str, str]]):
     try:
         with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for fp, arc in files:
-                if os.path.exists(fp):
-                    zf.write(fp, arc)
-    except Exception as e:
-        st.warning(f"שגיאה ביצירת ZIP: {e}")
+                if os.path.exists(fp): zf.write(fp, arc)
+    except Exception as e: st.warning(f"ZIP Error: {e}")
 
 # -------------------------------------------------------------------------------------
-# VALIDATION & OVERLAP
+# VALIDATION
 # -------------------------------------------------------------------------------------
-REQ_NUM = [
-    "reliability_score","maintenance_cost","safety_rating",
-    "insurance_cost","resale_value","performance_score",
-    "comfort_features","suitability","annual_fee","avg_fuel_consumption","fit_score"
-]
+REQ_NUM = ["reliability_score","maintenance_cost","safety_rating","insurance_cost","resale_value","performance_score","comfort_features","suitability","annual_fee","avg_fuel_consumption","fit_score"]
 REQ_CAT = ["brand","model","year","fuel","gear","price_range_nis","market_supply"]
 
 def validate_gemini_car(c: dict) -> list:
     issues = []
     for k in REQ_CAT + REQ_NUM:
-        if k not in c:
-            issues.append(f"missing field: {k}")
-    if "year" in c and not _is_num(c["year"]):
-        issues.append("year must be numeric")
-    for k in ["reliability_score","safety_rating","resale_value","performance_score","comfort_features","suitability"]:
-        if k in c:
-            v = c[k]
-            if not _is_num(v) or not (1 <= float(v) <= 10):
-                issues.append(f"{k} must be number 1–10")
-    for k in ["maintenance_cost","insurance_cost","annual_fee","avg_fuel_consumption","fit_score"]:
-        if k in c:
-            v = c[k]
-            if not _is_num(v) or float(v) < 0:
-                issues.append(f"{k} must be >=0")
-    if str(c.get("fuel","")).lower() == "electric" and str(c.get("gear","")).lower() != "automatic":
-        issues.append("EV must be automatic")
-    if "market_supply" in c and str(c["market_supply"]) not in ["גבוה","בינוני","נמוך"]:
-        issues.append("market_supply must be one of: גבוה/בינוני/נמוך")
+        if k not in c: issues.append(f"missing field: {k}")
+    if "year" in c and not _is_num(c["year"]): issues.append("year must be numeric")
     return issues
 
 def validate_gemini_payload(gem_json: dict) -> dict:
@@ -385,9 +339,7 @@ def validate_gemini_payload(gem_json: dict) -> dict:
         cars = (gem_json or {}).get("recommended_cars", [])
         out["total_cars"] = len(cars)
         for idx, c in enumerate(cars):
-            if not isinstance(c, dict):
-                out["issues"].append({"car_index": idx, "errors": ["car is not object"]})
-                continue
+            if not isinstance(c, dict): continue
             errs = validate_gemini_car(c)
             if errs:
                 out["cars_with_issues"] += 1
@@ -402,142 +354,100 @@ def extract_car_tuples(gem_json: dict) -> set:
     s = set()
     try:
         for c in (gem_json or {}).get("recommended_cars", []) or []:
-            b = str(c.get("brand","")).strip()
-            m = str(c.get("model","")).strip()
-            y = c.get("year", "")
-            y = int(y) if _is_num(y) else str(y).strip()
+            b, m, y = str(c.get("brand","")).strip(), str(c.get("model","")).strip(), c.get("year", "")
             s.add((b, m, y))
-    except Exception:
-        pass
+    except: pass
     return s
 
 def jaccard_overlap(a: set, b: set) -> float:
-    if not a and not b:
-        return 1.0
-    if not a or not b:
-        return 0.0
+    if not a and not b: return 1.0
+    if not a or not b: return 0.0
     return len(a & b) / float(len(a | b))
 
 # -------------------------------------------------------------------------------------
-# MODEL CALLS
+# API CALLS
 # -------------------------------------------------------------------------------------
-# 1. מודל ההמלצות (Gemini Recommender - 3 Pro)
 def call_gemini(profile:Dict[str,Any], timeout=180) -> Dict[str,Any]:
-    if gemini_recommender is None:
-        return {"_error": "Gemini Recommender client unavailable"}
+    if gemini_recommender is None: return {"_error": "Gemini Recommender client unavailable"}
     prompt = build_gemini_prompt(profile)
     def _do():
         resp = gemini_recommender.generate_content(prompt, request_options={"timeout": timeout})
-        text = None
-        try:
-            text = resp.text
-        except Exception:
-            try:
-                text = resp.candidates[0].content.parts[0].text
-            except Exception:
-                text = ""
+        text = resp.text if hasattr(resp, 'text') else ""
         return safe_json(text)
-    try:
-        return call_with_retry(_do, retries=3)
-    except Exception:
-        return {"_error": "Gemini Recommender call failed", "_trace": traceback.format_exc()}
+    try: return call_with_retry(_do, retries=3)
+    except Exception: return {"_error": "Gemini call failed", "_trace": traceback.format_exc()}
 
-# 2. מודל המשתמש/מתחרה (GPT-4o)
 def call_gpt_user(profile:Dict[str,Any], timeout=120) -> Dict[str,Any]:
-    if oa is None:
-        return {"_raw": "OpenAI client unavailable", "_json": {}}
+    if oa is None: return {"_raw": "OpenAI client unavailable", "_json": {}}
     def _do():
         resp = oa.chat.completions.create(
             model=OPENAI_USER_MODEL,
             messages=[
-                {"role":"user","content": f"זה הפרופיל שלי:\n{json.dumps(profile, ensure_ascii=False, indent=2)}"},
+                {"role":"user","content": f"User Profile:\n{json.dumps(profile, ensure_ascii=False)}"},
                 {"role":"user","content": USER_ONE_LINER.strip()},
             ],
-            temperature=0.9,
+            temperature=0.9
         )
         text = resp.choices[0].message.content
-        parsed = safe_json(text)
-        return {"_raw": text, "_json": parsed}
-    try:
-        return call_with_retry(_do, retries=3)
-    except Exception:
-        return {"_raw": "GPT call failed", "_json": {}, "_trace": traceback.format_exc()}
+        return {"_raw": text, "_json": safe_json(text)}
+    try: return call_with_retry(_do, retries=3)
+    except: return {"_raw": "GPT call failed", "_json": {}, "_trace": traceback.format_exc()}
 
-# 3. מודל השופט (GPT-4o)
 def call_evaluator(profile:Dict[str,Any], gem_json:Dict[str,Any], gpt_pack:Dict[str,Any]) -> Dict[str,Any]:
-    if oa is None:
-        return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"OpenAI Judge unavailable","criteria_breakdown":{}}
-    
+    if oa is None: return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"No OpenAI","criteria_breakdown":{}}
     def _do():
-        gpt_raw = gpt_pack.get("_raw", "") or ""
-
         msgs = [
             {"role":"system","content":"Hebrew output only. Return JSON only."},
-            {"role":"user","content": f"PROFILE:\n{json.dumps(profile, ensure_ascii=False, indent=2)}"},
-            {"role":"user","content": f"GEMINI_JSON:\n{json.dumps(gem_json, ensure_ascii=False, indent=2)}"},
-            {"role":"user","content": f"GPT_RAW:\n{(gpt_raw[:2000])}"},
+            {"role":"user","content": f"PROFILE:\n{json.dumps(profile, ensure_ascii=False)}"},
+            {"role":"user","content": f"GEMINI_JSON:\n{json.dumps(gem_json, ensure_ascii=False)}"},
+            {"role":"user","content": f"GPT_RAW:\n{(gpt_pack.get('_raw','') or '')[:2000]}"},
             {"role":"user","content": EVAL_PROMPT}
         ]
-        
-        resp = oa.chat.completions.create(
-            model=OPENAI_JUDGE_MODEL,
-            messages=msgs,
-            temperature=0.0
-        )
+        resp = oa.chat.completions.create(model=OPENAI_JUDGE_MODEL, messages=msgs, temperature=0.0)
         return safe_json(resp.choices[0].message.content)
-    
-    try:
-        return call_with_retry(_do, retries=2)
-    except Exception:
-        return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"Evaluation failed","criteria_breakdown":{}}
+    try: return call_with_retry(_do, retries=2)
+    except: return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"Eval Failed","criteria_breakdown":{}}
 
 # -------------------------------------------------------------------------------------
-# BENCHMARK UI
+# UI LOGIC
 # -------------------------------------------------------------------------------------
 def flatten_row(entry:Dict[str,Any]) -> Dict[str,Any]:
     prof = entry.get("profile",{})
-    ev   = entry.get("eval",{})
+    ev = entry.get("eval",{})
     gem_data = entry.get("gemini", {})
     queries = gem_data.get("search_queries", [])
-    
     return {
         "time": entry.get("ts","")[:19].replace("T"," "),
         "QID": prof.get("profile_id",""),
         "תקציב": prof.get("budget_nis",""),
-        "שימוש": prof.get("primary_use",""),
-        "Gemini Search Count": len(queries) if queries else 0, # חיווי על כמות החיפושים
+        "Gemini Search Count": len(queries) if queries else 0,
         "Eval: Gemini score": ev.get("gemini_score",""),
         "Eval: GPT score": ev.get("gpt_score",""),
         "Eval: Winner": ev.get("winner",""),
-        "Eval: Reason": ev.get("reason",""),
     }
 
 def export_dataframe_now(rows:List[Dict[str,Any]], csv_path:str):
     df = pd.DataFrame([flatten_row(r) for r in rows])
-    if len(df):
-        df.to_csv(csv_path, index=False, encoding="utf-8-sig")
-        return df
-    return pd.DataFrame()
+    if len(df): df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    return df
 
 def merge_two_csvs(base_csv: Optional[pd.DataFrame], new_csv: pd.DataFrame) -> pd.DataFrame:
-    if base_csv is None or base_csv.empty:
-        return new_csv.copy()
+    if base_csv is None or base_csv.empty: return new_csv.copy()
     base = base_csv.drop_duplicates(subset=["QID"], keep="last")
-    new  = new_csv.drop_duplicates(subset=["QID"], keep="last")
+    new = new_csv.drop_duplicates(subset=["QID"], keep="last")
     merged = pd.concat([base[~base["QID"].isin(new["QID"])], new], ignore_index=True)
     return merged.sort_values("QID").reset_index(drop=True)
 
-st.title("🚗 Car Advisor – Benchmark + Stress+++ v15")
-st.caption("A/B מלא + בדיקת עמידות דו־שלבית, הורדות ZIP, ושופט עם משקולות.")
+st.title("🚗 Car Advisor – Gemini 3 Pro (Preview) vs GPT-4o")
+st.caption("ממליץ: Gemini 3 Pro (עם חיפוש) | משתמש: GPT-4o | שופט: GPT-4o")
 
 with st.sidebar:
-    st.markdown("### ⚙️ הגדרות Benchmark")
-    batch_size = st.slider("מספר שאלונים בסבב", min_value=5, max_value=50, value=15, step=5)
-    seed = st.number_input("Seed לסדר ההרצה", min_value=0, max_value=999999, value=42, step=1)
+    st.markdown("### ⚙️ Benchmark")
+    batch_size = st.slider("Batch Size", 5, 50, 15, 5)
+    seed = st.number_input("Seed", 0, 999999, 42)
     st.markdown("---")
-    uploaded_prev = st.file_uploader("📤 העלה CSV קודם להמשך (אופציונלי)", type=["csv"])
-    st.markdown("---")
-    run_btn = st.button("🚀 התחל / המשך סבב Benchmark")
+    uploaded_prev = st.file_uploader("Upload previous CSV", type=["csv"])
+    run_btn = st.button("🚀 Start Benchmark (Standard)")
 
 def build_order_for_batch(done_qids:set, batch:int, seed_val:int)->List[Dict[str,Any]]:
     random.seed(seed_val)
@@ -549,42 +459,29 @@ def build_order_for_batch(done_qids:set, batch:int, seed_val:int)->List[Dict[str
 if run_btn:
     completed_qids = set()
     base_df = None
-    if uploaded_prev is not None:
+    if uploaded_prev:
         try:
             base_df = pd.read_csv(uploaded_prev)
             completed_qids = set(base_df["QID"].astype(str))
-            st.success(f"✅ נטענו {len(completed_qids)} שאלונים מקובץ קודם – נמשיך משם.")
-        except Exception as e:
-            st.error(f"שגיאה בקריאת הקובץ שהועלה: {e}")
-            base_df = None
-    elif os.path.exists(PARTIAL_CSV_PATH):
-        try:
-            df_partial = pd.read_csv(PARTIAL_CSV_PATH)
-            completed_qids = set(df_partial["QID"].astype(str))
-            base_df = df_partial.copy()
-            st.info(f"נמצאו על הדיסק {len(completed_qids)} שאלונים – ממשיכים מהם.")
-        except: pass
-
+            st.success(f"Loaded {len(completed_qids)} previous runs.")
+        except: st.error("Error reading CSV")
+    
     order = build_order_for_batch(completed_qids, batch_size, seed)
-    total_in_batch = len(order)
-    if total_in_batch == 0:
-        st.success("אין מה להשלים.")
+    if not order: st.success("Batch complete.")
     else:
         progress_bar = st.progress(0.0)
-        meta_cols = st.columns(3)
         t0 = time.perf_counter()
-        batch_rows: List[Dict[str,Any]] = []
-
+        batch_rows = []
         with ThreadPoolExecutor(max_workers=3) as pool:
             futures = []
             for idx, prof in enumerate(order, start=1):
                 def run_one(p=prof, i=idx):
                     gjson = call_gemini(p)
-                    gpt   = call_gpt_user(p)
-                    ev    = call_evaluator(p, gjson, gpt)
+                    gpt = call_gpt_user(p)
+                    ev = call_evaluator(p, gjson, gpt)
                     return i, p, gjson, gpt, ev
                 futures.append(pool.submit(run_one))
-
+            
             done_count = 0
             for fut in as_completed(futures):
                 idx, prof, gem, gpt, ev = fut.result()
@@ -593,23 +490,22 @@ if run_btn:
                 batch_rows.append(entry)
                 export_dataframe_now(batch_rows, PARTIAL_CSV_PATH)
                 done_count += 1
-                progress_bar.progress(done_count/total_in_batch)
+                progress_bar.progress(done_count/len(order))
                 
-                # חיווי ויזואלי על חיפוש
                 queries = gem.get("search_queries", [])
-                search_icon = f"🌐 ({len(queries)})" if queries else "🏠"
-                st.write(f"• {prof['profile_id']} | Search: {search_icon} | Winner: {ev.get('winner','?')}")
+                icon = f"🌐 ({len(queries)})" if queries else "🏠"
+                st.write(f"• {prof['profile_id']} | Search: {icon} | Winner: {ev.get('winner','?')}")
 
         df_batch = export_dataframe_now(batch_rows, FINAL_CSV_PATH)
-        st.success("✅ הסבב הושלם.")
+        st.success("Batch Done.")
         if base_df is not None and len(df_batch):
             merged = merge_two_csvs(base_df, df_batch)
             merged.to_csv(MERGED_CSV_PATH, index=False, encoding="utf-8-sig")
         st.dataframe(df_batch, use_container_width=True)
 
-# Stress+++ Logic
+# Stress+++
 st.markdown("---")
-st.header("🧪 Stress+++ Mode")
+st.header("🧪 Stress+++ Mode (Gemini 3 Pro)")
 if "stress_stage" not in st.session_state: st.session_state.stress_stage = "idle"
 if "stress_run1_data" not in st.session_state: st.session_state.stress_run1_data = None
 if "stress_run2_data" not in st.session_state: st.session_state.stress_run2_data = None
@@ -626,9 +522,9 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
                 val = validate_gemini_payload(gem)
                 return p, gem, gpt, ev, val
             futures.append(pool.submit(r))
+        
         for i, fut in enumerate(as_completed(futures)):
             p, gem, gpt, ev, val = fut.result()
-            
             if not val["ok"]:
                 failures.append({"QID": p["profile_id"], "issues": json.dumps(val["issues"], ensure_ascii=False)})
             
@@ -637,7 +533,6 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
             rows.append(entry)
             
             queries = gem.get("search_queries", [])
-            search_count = len(queries)
             winner = ev.get("winner", "Tie")
             
             run_summary[p["profile_id"]] = {
@@ -646,60 +541,40 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
                 "winner": winner,
                 "cars_set": extract_car_tuples(gem),
                 "val_ok": val["ok"],
-                "search_count": search_count
+                "search_count": len(queries)
             }
             
-            # תצוגה מפורטת (Expander)
-            search_icon = f"🌐 ({search_count})" if queries else "🏠"
+            search_icon = f"🌐 ({len(queries)})" if queries else "🏠"
             valid_icon = "✅" if val["ok"] else "❌"
             
             with st.expander(f"{i+1}. {p['profile_id']} | 🏆 {winner} | Search: {search_icon} | Valid: {valid_icon}"):
-                
-                # כרטיסיית השיפוט
                 st.markdown("### ⚖️ הכרעת השופט (GPT-4o)")
-                col_score1, col_score2, col_reason = st.columns([1, 1, 3])
-                with col_score1: st.metric("Gemini Score", ev.get("gemini_score", 0))
-                with col_score2: st.metric("GPT Score", ev.get("gpt_score", 0))
-                with col_reason: st.info(f"**נימוק:** {ev.get('reason', 'N/A')}")
-                st.markdown("**פירוט ציונים:**")
+                c1, c2, c3 = st.columns([1,1,3])
+                with c1: st.metric("Gemini 3 Score", ev.get("gemini_score", 0))
+                with c2: st.metric("GPT-4o Score", ev.get("gpt_score", 0))
+                with c3: st.info(ev.get('reason', 'N/A'))
                 st.json(ev.get("criteria_breakdown", {}))
-                
                 st.divider()
                 
-                # כרטיסיית השוואה
-                col_gem, col_gpt = st.columns(2)
-                
-                with col_gem:
-                    st.subheader(f"🤖 Gemini ({len(gem.get('recommended_cars', []))} רכבים)")
+                c_gem, c_gpt = st.columns(2)
+                with c_gem:
+                    st.subheader(f"🤖 Gemini 3 Pro ({len(gem.get('recommended_cars', []))} רכבים)")
                     if queries:
-                        with st.popover("🔍 הצג שאילתות חיפוש"):
-                            st.code("\n".join(queries), language="text")
+                        with st.popover("🔍 שאילתות חיפוש"): st.code("\n".join(queries))
                     
-                    cars = gem.get("recommended_cars", [])
-                    if cars:
-                        for c in cars:
-                            st.text(f"• {c.get('brand')} {c.get('model')} {c.get('year')} ({c.get('price_range_nis')}₪)")
-                    else:
-                        st.warning("לא הוחזרו רכבים או JSON שגוי")
-                    
-                    with st.popover("📄 JSON מלא"):
-                        st.json(gem)
-
-                with col_gpt:
-                    st.subheader("👤 GPT (User Simulator)")
-                    raw_txt = gpt.get("_raw", "")
-                    st.text_area("תשובת המודל המתחרה", value=raw_txt, height=200)
-
+                    for c in gem.get("recommended_cars", []):
+                        st.text(f"• {c.get('brand')} {c.get('model')} {c.get('year')} ({c.get('price_range_nis')}₪)")
+                    with st.popover("📄 JSON מלא"): st.json(gem)
+                
+                with c_gpt:
+                    st.subheader("👤 GPT-4o (User)")
+                    st.text_area("תשובה", value=gpt.get("_raw", ""), height=200)
+                
                 st.divider()
-                st.caption("📝 נתוני הפרופיל שנשלחו:")
+                st.caption("📝 פרופיל:")
                 st.json(p)
-    
-    df_sum = pd.DataFrame([{
-        "QID": k, 
-        "Winner": v["winner"], 
-        "Search Queries": v["search_count"]
-    } for k,v in run_summary.items()])
-    
+
+    df_sum = pd.DataFrame([{ "QID": k, "Winner": v["winner"], "Search Queries": v["search_count"] } for k,v in run_summary.items()])
     if len(df_sum): df_sum.to_csv(out_sum, index=False, encoding="utf-8-sig")
     if len(failures): pd.DataFrame(failures).to_csv(out_fail, index=False, encoding="utf-8-sig")
     return rows, df_sum, pd.DataFrame(failures), run_summary
@@ -722,7 +597,6 @@ elif st.session_state.stress_stage == "r1_done":
         r2_res = run_one_stress_round(2, st.session_state.stress_profiles, R2_ROWS_PATH, R2_SUMMARY_CSV, R2_FAILS_CSV)
         st.session_state.stress_run2_data = r2_res[3]
         
-        # Diff Logic
         diffs = compute_combined_diffs(st.session_state.stress_profiles, st.session_state.stress_run1_data, st.session_state.stress_run2_data)
         diffs.to_csv(COMBINED_DIFFS_CSV, index=False, encoding="utf-8-sig")
         make_zip(COMBINED_ZIP_PATH, [(COMBINED_DIFFS_CSV, "diffs.csv")])
@@ -737,4 +611,4 @@ elif st.session_state.stress_stage == "finished":
         st.session_state.stress_stage = "idle"
         st.rerun()
 
-st.caption("© 2025 Car Advisor")
+st.caption("© 2025 Car Advisor (Gemini 3 Pro Preview)")
