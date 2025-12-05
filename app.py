@@ -32,7 +32,7 @@ st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_
 
 # 1. המודל שלנו (הממליץ)
 # שימוש במודל 1.5 פרו שהוא הכי יציב עם הכלי הזה
-GEMINI_RECOMMENDER_MODEL = "gemini-1.5-pro"
+GEMINI_RECOMMENDER_MODEL = "gemini-pro-latest"
 
 # 2. המודל המתחרה/משתמש
 OPENAI_USER_MODEL = "gpt-4o"
