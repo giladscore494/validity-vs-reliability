@@ -132,7 +132,7 @@ Hard constraints (MUST):
 Output requirements:
 1) Return a SINGLE JSON object with fields: "search_performed", "search_queries", "recommended_cars".
 2) search_performed: ALWAYS return True. Simulate realistic Hebrew queries.
-3) search_queries: ALWAYS include the exact Hebrew queries you would run.
+3) search_queries: ALWAYS include the exact Hebrew queries you would run to find this info.
 4) recommended_cars: an array of 5–10 cars. EACH car MUST include:
     - brand, model, year, fuel, gear, turbo, engine_cc, price_range_nis
     - avg_fuel_consumption (+ fuel_method):
@@ -502,16 +502,20 @@ def call_evaluator(profile:Dict[str,Any], gem_json:Dict[str,Any], gpt_pack:Dict[
         return {"gemini_score":0,"gpt_score":0,"winner":"Tie","reason":"Evaluation failed","criteria_breakdown":{}}
 
 # -------------------------------------------------------------------------------------
-# BENCHMARK UI (אין שינויים לוגיים מכאן והלאה, רק שימוש בפונקציות המעודכנות)
+# BENCHMARK UI
 # -------------------------------------------------------------------------------------
 def flatten_row(entry:Dict[str,Any]) -> Dict[str,Any]:
     prof = entry.get("profile",{})
     ev   = entry.get("eval",{})
+    gem_data = entry.get("gemini", {})
+    queries = gem_data.get("search_queries", [])
+    
     return {
         "time": entry.get("ts","")[:19].replace("T"," "),
         "QID": prof.get("profile_id",""),
         "תקציב": prof.get("budget_nis",""),
         "שימוש": prof.get("primary_use",""),
+        "Gemini Search Count": len(queries) if queries else 0, # חיווי על כמות החיפושים
         "Eval: Gemini score": ev.get("gemini_score",""),
         "Eval: GPT score": ev.get("gpt_score",""),
         "Eval: Winner": ev.get("winner",""),
@@ -601,6 +605,11 @@ if run_btn:
                 done_count += 1
                 progress_bar.progress(done_count/total_in_batch)
                 
+                # חיווי ויזואלי על חיפוש
+                queries = gem.get("search_queries", [])
+                search_icon = f"🌐 ({len(queries)})" if queries else "🏠"
+                st.write(f"• {prof['profile_id']} | Search: {search_icon} | Winner: {ev.get('winner','?')}")
+
         df_batch = export_dataframe_now(batch_rows, FINAL_CSV_PATH)
         st.success("✅ הסבב הושלם.")
         if base_df is not None and len(df_batch):
@@ -634,10 +643,26 @@ def run_one_stress_round(run_no:int, profiles:List[Dict[str,Any]], out_rows:str,
             entry = {"ts": datetime.now().isoformat(), "run": run_no, "profile": p, "gemini": gem, "gpt": gpt, "eval": ev, "validation": val}
             append_item(out_rows, entry)
             rows.append(entry)
-            run_summary[p["profile_id"]] = {"gem_score": ev.get("gemini_score", 0), "gpt_score": ev.get("gpt_score", 0), "winner": ev.get("winner", "Tie"), "cars_set": extract_car_tuples(gem), "val_ok": val["ok"]}
-            st.write(f"• {p['profile_id']} | Winner: {ev.get('winner','?')}")
+            
+            queries = gem.get("search_queries", [])
+            run_summary[p["profile_id"]] = {
+                "gem_score": ev.get("gemini_score", 0),
+                "gpt_score": ev.get("gpt_score", 0),
+                "winner": ev.get("winner", "Tie"),
+                "cars_set": extract_car_tuples(gem),
+                "val_ok": val["ok"],
+                "search_count": len(queries)
+            }
+            
+            search_icon = f"🌐 ({len(queries)})" if queries else "🏠"
+            st.write(f"• {p['profile_id']} | Search: {search_icon} | Winner: {ev.get('winner','?')}")
     
-    df_sum = pd.DataFrame([{"QID": k, "Winner": v["winner"]} for k,v in run_summary.items()])
+    df_sum = pd.DataFrame([{
+        "QID": k, 
+        "Winner": v["winner"], 
+        "Search Queries": v["search_count"]
+    } for k,v in run_summary.items()])
+    
     if len(df_sum): df_sum.to_csv(out_sum, index=False, encoding="utf-8-sig")
     if len(failures): pd.DataFrame(failures).to_csv(out_fail, index=False, encoding="utf-8-sig")
     return rows, df_sum, pd.DataFrame(failures), run_summary
