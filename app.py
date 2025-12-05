@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-# Car Advisor – Benchmark + Stress+++ v15 (Final Fixed Version)
-# - Recommender: Gemini (Grounding Enabled via 'google_search')
+# Car Advisor – Benchmark + Stress+++ v15 (Final Fixed Tool Config)
+# - Recommender: Gemini (Grounding Enabled via object config)
 # - User Simulator: GPT-4o
 # - Judge: GPT-4o
 # =====================================================================================
@@ -31,8 +31,6 @@ st.set_page_config(page_title="Car Advisor – Benchmark / Stress+++ v15", page_
 # --- הגדרת המודלים ---
 
 # 1. המודל שלנו (הממליץ)
-# הערה: אם יש לך גישה ל-gemini-3-pro-preview, שנה את השם כאן.
-# אם אתה מקבל שגיאת 404, השאר את זה על gemini-1.5-pro שהוא הכי חזק כרגע ב-Public API.
 GEMINI_RECOMMENDER_MODEL = "gemini-1.5-pro" 
 
 # 2. המודל המתחרה/משתמש
@@ -93,8 +91,9 @@ if GEMINI_API_KEY:
                 "top_p": 0.9,
                 "top_k": 40,
             },
-            # --- התיקון הקריטי: שימוש ב-google_search ---
-            tools='google_search' 
+            # --- התיקון כאן: רשימה המכילה מילון ---
+            tools=[{'google_search': {}}]
+            # -------------------------------------
         )
     except Exception as e:
         st.error(f"Error initializing Gemini: {e}")
