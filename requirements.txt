@@ -1,16 +1,16 @@
-# ממשק המשתמש (Streamlit)
-streamlit>=1.40.0
-
-# עיבוד נתונים
-pandas>=2.2.0
+streamlit>=1.34.0
+pandas>=2.1.4
 numpy>=1.26.0
 
-# הספרייה של גוגל (Gemini)
-# חובה גרסה עדכנית מאוד כדי לתמוך ב-Gemini 3 ובאובייקט GoogleSearch החדש
-google-generativeai>=0.8.3
+# Gemini (SDK הישן – הקוד שלך משתמש בו)
+google-generativeai>=0.4.0
 
-# הספרייה של OpenAI (עבור GPT-4o)
-openai>=1.55.0
+# JSON repair למענה חלקי
+json-repair>=0.2.4
 
-# כלי לתיקון JSON (מונע קריסות כשהמודל מחזיר פלט לא תקין)
-json-repair>=0.30.0
+# OpenAI SDK (GPT-4o – User & Judge)
+openai>=1.37.0
+
+# תומך בכלים
+requests>=2.31.0
+tqdm>=4.66.0
